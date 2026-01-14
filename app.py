@@ -10,20 +10,24 @@ from dotenv import load_dotenv
 load_dotenv()
 API_KEY = os.getenv("GOOGLE_API_KEY")
 
-st.set_page_config(page_title="2026 Agentic Workforce", layout="wide")
-st.title("🚀 Enterprise Agentic Workforce")
+st.set_page_config(page_title="2026 Action-Agent Workforce", layout="wide")
+st.title("🏗️ Action-Oriented Agentic Workforce")
 
-# --- UPDATED ROSTER ---
+# --- THE COMPREHENSIVE ROSTER (Planning + Action) ---
 AGENT_ROSTER = {
     "The Prompt Engineer": {
-        "responsibility": "Catalyst: Optimizes raw vision into a technical Manifesto.",
+        "responsibility": "Catalyst: Optimizes raw vision into a Technical Manifesto.",
         "sys_prompt": "You are a Senior Prompt Engineer. Return JSON with 'project_name', 'mission', and 'technical_focus'."
     },
-    "The Architect (Lead Dev)": {
+    "The Architect": {
         "responsibility": "Skeleton: Translates the idea into a technical roadmap.",
         "sys_prompt": "You are a Software Architect. Return JSON with 'tech_stack' and 'folder_structure'."
     },
-    "The UI/UX Visionary": {
+    "The Coder (Full-Stack)": {
+        "responsibility": "The Muscle: Generates actual Flutter/React Native code files.",
+        "sys_prompt": "You are a Senior Developer. Based on the Architect's JSON, generate the main application code (e.g., App.js or main.dart) as a string inside a JSON object: {'filename': '...', 'code_content': '...'}"
+    },
+    "The UI Visionary": {
         "responsibility": "Face: Generates design layouts and user flows.",
         "sys_prompt": "You are a UI Designer. Return JSON with 'color_palette' and 'screen_list'."
     },
@@ -35,9 +39,13 @@ AGENT_ROSTER = {
         "responsibility": "Banker: Configures revenue models and pricing.",
         "sys_prompt": "You are a Financial Monetizer. Return JSON with 'pricing_tiers' and 'revenue_model'."
     },
+    "The Deployer": {
+        "responsibility": "Finalizer: Creates the build scripts (Gradle/Fastlane) for .aab export.",
+        "sys_prompt": "You are a DevOps Engineer. Create a JSON 'build_script' that contains the commands to compile this app into an .aab file."
+    },
     "The Summarizer": {
         "responsibility": "CEO: Consolidates all outputs into a master project brief.",
-        "sys_prompt": "You are the Project CEO. Summarize all previous JSON data into a clear Markdown Executive Summary."
+        "sys_prompt": "You are the Project CEO. Summarize everything into a clear Markdown Executive Summary."
     }
 }
 
@@ -46,7 +54,6 @@ col1, col2 = st.columns(2)
 with col1:
     selected_agents = st.multiselect("Select Agents:", options=list(AGENT_ROSTER.keys()), default=list(AGENT_ROSTER.keys()))
 with col2:
-    # Restored models for 2026
     selected_model = st.selectbox("Select Model:", ["gemini-3-flash-preview", "gemini-2.5-flash-lite", "gemini-2.0-flash"])
     run_mode = st.radio("Execution Mode:", ["Real AI", "Mock Mode"], index=1, horizontal=True)
 
@@ -58,57 +65,61 @@ class WorkforceManager:
         if mode == "Real AI":
             self.client = genai.Client(api_key=API_KEY)
 
-    def run_agent(self, role, user_input, is_summary=False):
+    def run_agent(self, role, input_context):
         if self.mode == "Mock Mode":
             time.sleep(1)
-            return {"status": "Mock success", "agent": role} if not is_summary else "# Mock Executive Summary\nDone."
+            return {"status": "Mock success", "agent": role, "data": "Simulated Action Completed."}
         
+        is_text_output = (role in ["The Summarizer", "The Coder (Full-Stack)"])
         try:
-            # FIX: Using the correct snake_case field names for 2026 SDK
             response = self.client.models.generate_content(
                 model=self.model_id,
-                contents=user_input,
+                contents=input_context,
                 config=types.GenerateContentConfig(
                     system_instruction=AGENT_ROSTER[role]["sys_prompt"],
-                    response_mime_type="application/json" if not is_summary else "text/plain",
+                    response_mime_type="application/json" if not is_text_output else "text/plain",
                     temperature=0.7
                 )
             )
-            return json.loads(response.text) if not is_summary else response.text
+            # Return as JSON if possible, otherwise raw text
+            try: return json.loads(response.text)
+            except: return response.text
         except Exception as e:
             st.error(f"❌ {role} Error: {e}")
             return None
 
 # --- WORKFLOW ---
-user_vision = st.text_area("🚀 Input your Project Vision", height=100)
+user_vision = st.text_area("🚀 Describe your App/Game Vision", height=100)
 
-if st.button("Start Conveyor Belt"):
+if st.button("Start Action Conveyor Belt"):
     if not user_vision:
         st.warning("Please enter a vision.")
     else:
         wf = WorkforceManager(run_mode, selected_model)
-        all_outputs = {"original_vision": user_vision}
+        all_results = {"vision": user_vision}
         
         for agent in selected_agents:
-            with st.status(f"🤖 {agent} processing...", expanded=True) as s:
-                is_summary = (agent == "The Summarizer")
-                # Summarizer gets ALL previous data; others get the rolling context
-                input_data = str(all_outputs) if is_summary else user_vision
-                
-                result = wf.run_agent(agent, input_data, is_summary=is_summary)
+            with st.status(f"🛠️ {agent} is active...", expanded=True) as s:
+                # Agents use the cumulative knowledge of the "all_results" dictionary
+                result = wf.run_agent(agent, str(all_results))
                 
                 if result:
-                    if is_summary:
+                    all_results[agent] = result
+                    
+                    # Action: Save files based on type
+                    if not os.path.exists("workforce"): os.makedirs("workforce")
+                    
+                    if agent == "The Coder (Full-Stack)":
+                        st.code(result, language="javascript")
+                        with open("workforce/app_code.txt", "w") as f: f.write(str(result))
+                    elif agent == "The Summarizer":
                         st.markdown(result)
                         with open("workforce/EXECUTIVE_SUMMARY.md", "w") as f: f.write(result)
                     else:
                         st.json(result)
-                        all_outputs[agent] = result
-                        # Save JSON
-                        if not os.path.exists("workforce"): os.makedirs("workforce")
-                        filename = agent.lower().replace(" ", "_").replace("(", "").replace(")", "")
-                        with open(f"workforce/{filename}.json", "w") as f: json.dump(result, f, indent=4)
+                        fname = agent.lower().replace(" ", "_").replace("(", "").replace(")", "")
+                        with open(f"workforce/{fname}.json", "w") as f: json.dump(result, f, indent=4)
                     
                     s.update(label=f"✅ {agent} Finished", state="complete")
         
-        st.success("🏁 Project Conveyor Belt Complete. Files saved in /workforce")
+        st.success("🏁 Workforce tasks complete. Your code and plans are in the /workforce folder.")
